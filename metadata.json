@@ -1,0 +1,6 @@
+{
+  "name": "9c2 Terminal AI",
+  "description": "Next-generation animated cyberpunk terminal AI with live vision, voice synthesis, speech recognition, and EDU homework solver.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

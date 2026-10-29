@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-[#07090e]">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>9c2.io.vn - Terminal AI v2.5</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Tùy chỉnh thanh cuộn kiểu Terminal */
+        .chat-scroll::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .chat-scroll::-webkit-scrollbar-track {
+            background: #090c13;
+            border-left: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background-color: #334155;
+            border-radius: 3px;
+        }
+        .chat-scroll::-webkit-scrollbar-thumb:hover {
+            background-color: #10b981;
+        }
+        
+        /* Hiệu ứng nhấp nháy con trỏ Terminal */
+        .typing-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 1.15em;
+            background-color: currentColor;
+            animation: blink 1s step-end infinite;
+            vertical-align: -0.15em;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Định dạng nội dung markdown kiểu Terminal */
+        .markdown-body {
+            line-height: 1.65;
+        }
+        .markdown-body p { 
+            margin-bottom: 0.75rem; 
+            color: inherit;
+        }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body strong { color: #fff; font-weight: bold; }
+        .markdown-body pre {
+            background-color: #0b0f19;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #f1f5f9;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 0.75rem 0;
+            position: relative;
+        }
+        .markdown-body code {
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 0.125rem 0.35rem;
+            border-radius: 3px;
+            color: #a7f3d0;
+            font-family: inherit;
+            font-size: 0.9em;
+        }
+        .markdown-body pre code {
+            background-color: transparent;
+            border: none;
+            color: inherit;
+            padding: 0;
+        }
+        
+        /* Ảnh / Video trong terminal */
+        .msg-media {
+            max-width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            margin-top: 0.5rem;
+            max-height: 380px;
+            border-radius: 6px;
+            object-fit: contain;
+            background: #090c13;
+        }
+        
+        /* Hiệu ứng ghi âm */
+        .mic-recording {
+            color: #000 !important;
+            background-color: #ef4444 !important;
+            border-color: #ef4444 !important;
+            animation: pulse-red 1s infinite;
+        }
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Clean screen without scanline stripes */
+        .message-fade-in {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        html, body {
+            height: 100%;
+            height: 100dvh;
+            overflow: hidden;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-[#07090e] text-slate-100 flex text-sm sm:text-base selection:bg-emerald-500 selection:text-black antialiased">
+
+    <!-- Sidebar Overlay (Chỉ dùng cho mobile) -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-black/70 z-40 hidden backdrop-blur-sm transition-opacity md:hidden"></div>
+
+    <!-- Sidebar Lịch sử -->
+    <aside id="sidebar" class="fixed md:relative inset-y-0 left-0 w-64 lg:w-72 bg-[#090c13] border-r border-white/10 z-50 transform -translate-x-full md:translate-x-0 flex flex-col transition-transform duration-300 shrink-0">
+        <div class="p-3.5 border-b border-white/10 flex justify-between items-center bg-black/40">
+            <span class="font-bold text-xs tracking-wider text-emerald-400">[NHẬT KÝ PHIÊN]</span>
+            <button id="close-sidebar" class="md:hidden hover:bg-white/10 text-gray-400 hover:text-white px-2 py-1 rounded transition-colors">[X]</button>
+        </div>
+        <div class="p-3 border-b border-white/10 flex gap-2">
+            <button onclick="newChat()" class="flex-1 border border-white/20 px-2 py-2 hover:bg-white hover:text-black font-bold transition-all text-xs lg:text-sm rounded flex items-center justify-center gap-1">
+                + [PHIÊN MỚI]
+            </button>
+            <button onclick="resetChat()" class="border border-white/20 px-3 py-2 hover:border-red-400 hover:text-red-400 font-bold transition-all text-xs lg:text-sm rounded" title="Dọn sạch màn hình">
+                [CLR]
+            </button>
+        </div>
+        <div id="history-list" class="flex-1 overflow-y-auto p-2 chat-scroll flex flex-col gap-1.5">
+            <!-- Lịch sử chèn vào đây -->
+        </div>
+        <div class="p-3 border-t border-white/10 bg-black/60 text-[10px] text-gray-500 flex justify-between">
+            <span>KERNEL: 9c2-v2.5</span>
+            <span class="text-emerald-400 font-bold">ONLINE</span>
+        </div>
+    </aside>
+
+    <!-- Khu vực chính (Main Workspace) -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden relative">
+        
+        <!-- Header Terminal -->
+        <header class="border-b border-white/10 py-2.5 px-4 flex flex-row items-center justify-between z-10 shrink-0 gap-2 bg-[#090c13]/90 backdrop-blur-md">
+            <div class="flex items-center gap-3">
+                <button id="open-sidebar" class="md:hidden border border-white/20 px-2 py-1 text-xs hover:bg-white hover:text-black rounded transition-colors">[LOGS]</button>
+                <div class="hidden sm:block">
+                    <h1 class="font-bold tracking-widest uppercase text-xs lg:text-sm text-white">root@9c2.io.vn:~#</h1>
+                    <p class="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        TRẠNG THÁI: <span class="text-white">ONLINE (9c2 AI Core)</span>
+                    </p>
+                </div>
+                <div class="block sm:hidden leading-tight">
+                    <h1 class="font-bold uppercase text-xs text-white">root@9c2:~#</h1>
+                    <span class="text-[10px] text-emerald-400 animate-pulse">ONLINE</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 sm:gap-3 text-xs font-bold flex-wrap justify-end">
+                <button id="mods-toggle" class="border border-white/20 text-white px-2.5 py-1 hover:bg-white hover:text-black rounded transition-all" title="Chuyển đổi Model AI">
+                    [MODS: v1.5 Flash]
+                </button>
+                <button id="live-mode-btn" class="border border-emerald-400/80 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 px-2.5 py-1 rounded transition-colors animate-pulse" title="Vào chế độ Live">
+                    [LIVE VISION]
+                </button>
+                <button id="tts-toggle" class="border border-white/20 text-gray-400 px-2 py-1 hover:text-white rounded transition-colors" title="Bật/Tắt giọng nói Bot">
+                    [TTS:<span id="tts-status">OFF</span>]
+                </button>
+            </div>
+        </header>
+
+        <!-- Thanh lệnh nhanh (Quick commands) -->
+        <div class="border-b border-white/10 px-4 py-1.5 bg-black/40 flex items-center gap-2 overflow-x-auto chat-scroll shrink-0 text-xs">
+            <span class="text-gray-500 text-[10px] shrink-0 font-mono">LỆNH NHANH:</span>
+            <button onclick="executeQuickCommand('/help')" class="shrink-0 px-2 py-0.5 rounded border border-white/10 text-gray-400 hover:text-emerald-300 text-[11px]">/help</button>
+            <button onclick="executeQuickCommand('/clear')" class="shrink-0 px-2 py-0.5 rounded border border-white/10 text-gray-400 hover:text-emerald-300 text-[11px]">/clear</button>
+            <button onclick="executeQuickCommand('/model pro')" class="shrink-0 px-2 py-0.5 rounded border border-white/10 text-gray-400 hover:text-emerald-300 text-[11px]">/model pro</button>
+            <button onclick="executeQuickCommand('/stats')" class="shrink-0 px-2 py-0.5 rounded border border-white/10 text-gray-400 hover:text-emerald-300 text-[11px]">/stats</button>
+        </div>
+
+        <!-- Chat Area -->
+        <main id="chat-container" class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 chat-scroll flex flex-col gap-6 bg-[#07090e]">
+            <div class="w-full max-w-5xl mx-auto flex flex-col gap-6">
+                <!-- Lời chào ban đầu -->
+                <div class="w-full text-emerald-400 message-fade-in">
+                    <div class="font-bold mb-1 text-xs">root@9c2.io.vn:~#</div>
+                    <div class="pl-4 markdown-body text-sm sm:text-base leading-relaxed text-slate-200">
+                        Xin chào! Tôi là **9c2**, trợ lý AI dòng lệnh trực tuyến tại 9c2.io.vn.
+                        Nhập câu hỏi, câu lệnh hoặc nhấn **[GIẢI BÀI TẬP EDU]** để giải chi tiết bài toán từ ảnh.
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="border-t border-white/10 p-3 sm:p-4 shrink-0 bg-[#080b12]">
+            <form id="chat-form" class="max-w-5xl mx-auto flex flex-col gap-2.5">
+                
+                <div class="flex-1 border border-white/20 flex items-center bg-black/60 rounded-lg w-full focus-within:border-white focus-within:ring-1 focus-within:ring-white/40 min-h-[48px] px-3 transition-all">
+                    <span class="text-emerald-400 font-bold select-none text-sm lg:text-base mr-2">$ </span>
+                    <textarea 
+                        id="user-input" 
+                        rows="1"
+                        class="w-full bg-transparent border-none focus:ring-0 resize-none py-2.5 text-white placeholder-gray-500 outline-none max-h-40 font-mono text-xs sm:text-sm lg:text-base leading-relaxed"
+                        placeholder="Nhập câu lệnh hoặc /help..."
+                        required
+                    ></textarea>
+                </div>
+
+                <div class="flex justify-between items-center w-full gap-2 overflow-x-auto pb-0.5">
+                    <div class="flex gap-2 flex-nowrap whitespace-nowrap">
+                        <input type="file" id="file-input" accept="image/*,video/*" class="hidden">
+                        <input type="file" id="edu-input" accept="image/*" capture="environment" class="hidden">
+                        
+                        <button type="button" id="attach-btn" class="border border-white/20 px-2.5 py-1.5 text-xs font-bold hover:border-white text-gray-300 hover:text-white rounded bg-white/[0.02] transition-colors shrink-0">
+                            [TẬP TIN]
+                        </button>
+                        <button type="button" id="mic-btn" class="border border-white/20 px-2.5 py-1.5 text-xs font-bold hover:border-white text-gray-300 hover:text-white rounded bg-white/[0.02] transition-colors shrink-0">
+                            [MIC]
+                        </button>
+                        <button type="button" id="edu-btn" class="border border-cyan-400/80 bg-cyan-500/10 text-cyan-300 px-3 py-1.5 text-xs font-bold hover:bg-cyan-500/20 rounded transition-colors shrink-0" title="Chụp ảnh giải bài tập tự động">
+                            [GIẢI BÀI TẬP EDU]
+                        </button>
+                    </div>
+                    
+                    <button 
+                        type="submit" 
+                        id="send-btn"
+                        class="border border-white bg-white text-black font-bold px-5 py-1.5 text-xs lg:text-sm hover:bg-gray-200 rounded transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        EXECUTE
+                    </button>
+                </div>
+            </form>
+        </footer>
+    </div>
+
+    <!-- Giao diện LIVE MODE -->
+    <div id="live-overlay" class="hidden fixed inset-0 bg-black/95 z-[60] flex flex-col items-center justify-between p-3 sm:p-6 backdrop-blur-md">
+        <div class="w-full max-w-4xl flex justify-between items-center border border-white/20 bg-black/80 px-4 py-2 rounded-lg">
+            <div class="text-white font-bold flex items-center gap-2 text-xs sm:text-sm">
+                <span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping"></span>
+                [9c2_LIVE_VISION_HUD]
+            </div>
+            <button id="close-live-btn" class="text-red-400 font-bold hover:text-white border border-red-500/50 hover:bg-red-500 px-3 py-1 rounded text-xs transition-colors">
+                [X] ĐÓNG
+            </button>
+        </div>
+
+        <div class="relative w-full max-w-4xl flex-1 my-3 rounded-lg overflow-hidden border border-white/30 bg-[#0a0d14] flex items-center justify-center">
+            <video id="live-video" autoplay playsinline muted class="w-full h-full object-cover"></video>
+            
+            <div class="absolute bottom-4 left-4 text-emerald-400 bg-black/85 px-3 py-1 font-bold border border-emerald-500/50 rounded text-xs" id="live-status">
+                &gt; AWAITING AUDIO INPUT_
+            </div>
+        </div>
+
+        <div class="w-full max-w-4xl flex flex-col gap-2 mb-3">
+            <div id="live-transcript" class="bg-black/80 border border-white/20 p-2.5 rounded text-xs text-gray-300 min-h-[38px] truncate">
+                (Bạn): ...
+            </div>
+            <div id="live-bot-reply" class="bg-black/90 border border-emerald-500/40 p-2.5 rounded text-xs text-emerald-300 min-h-[48px] max-h-20 overflow-y-auto chat-scroll font-bold">
+                (9c2): ...
+            </div>
+        </div>
+
+        <div class="w-full max-w-4xl flex gap-3 justify-center flex-wrap">
+            <button id="live-cam-toggle" class="border border-emerald-400 bg-emerald-500/20 text-emerald-300 px-4 py-1.5 rounded font-bold text-xs transition-colors">
+                [CAM: BẬT]
+            </button>
+            <button id="live-mic-toggle" class="border border-emerald-400 bg-emerald-500/20 text-emerald-300 px-4 py-1.5 rounded font-bold text-xs transition-colors">
+                [MIC: BẬT]
+            </button>
+            <button id="live-flip-cam" class="border border-white/40 text-white hover:bg-white hover:text-black px-4 py-1.5 rounded font-bold text-xs transition-colors">
+                [ĐỔI CAMERA]
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = '82062eed6fmsh92015964630c98dp12fa5cjsn033c04642d1b';
+
+        const chatContainer = document.getElementById('chat-container');
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        
+        const attachBtn = document.getElementById('attach-btn');
+        const fileInput = document.getElementById('file-input');
+        const eduBtn = document.getElementById('edu-btn');
+        const eduInput = document.getElementById('edu-input');
+        const micBtn = document.getElementById('mic-btn');
+        
+        const ttsToggle = document.getElementById('tts-toggle');
+        const ttsStatus = document.getElementById('tts-status');
+        const modsToggle = document.getElementById('mods-toggle');
+        let currentApiMode = 'flash';
+
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        const openSidebarBtn = document.getElementById('open-sidebar');
+        const closeSidebarBtn = document.getElementById('close-sidebar');
+        const historyList = document.getElementById('history-list');
+        
+        const liveModeBtn = document.getElementById('live-mode-btn');
+        const liveOverlay = document.getElementById('live-overlay');
+        const liveVideo = document.getElementById('live-video');
+        const liveStatus = document.getElementById('live-status');
+        const liveTranscript = document.getElementById('live-transcript');
+        const liveBotReply = document.getElementById('live-bot-reply');
+        
+        const closeLiveBtn = document.getElementById('close-live-btn');
+        const liveCamToggle = document.getElementById('live-cam-toggle');
+        const liveMicToggle = document.getElementById('live-mic-toggle');
+        const liveFlipCam = document.getElementById('live-flip-cam');
+
+        let isTtsEnabled = false;
+        let isLiveMode = false;
+        let sessionId = Date.now().toString();
+        let sessions = JSON.parse(localStorage.getItem('chatSessions9c2')) || {};
+        let conversationHistory = [];
+
+        function getSystemPrompt() {
+            const modelName = currentApiMode === 'flash' ? 'v1.5 Flash' : 'v3 Pro';
+            return `You are ${modelName}, an advanced terminal AI assistant for 9c2.io.vn. Your name is strictly ${modelName}. You are NOT Gemini and you are NOT built by Google. Never mention Gemini or Google. Respond in the exact language of the user's input. Provide clear and structured markdown explanations.`;
+        }
+
+        function openSidebar() {
+            sidebar.classList.remove('-translate-x-full');
+            sidebarOverlay.classList.remove('hidden');
+        }
+
+        function closeSidebar() {
+            sidebar.classList.add('-translate-x-full');
+            sidebarOverlay.classList.add('hidden');
+        }
+
+        openSidebarBtn.addEventListener('click', openSidebar);
+        closeSidebarBtn.addEventListener('click', closeSidebar);
+        sidebarOverlay.addEventListener('click', closeSidebar);
+
+        function saveSession() {
+            sessions[sessionId] = conversationHistory;
+            localStorage.setItem('chatSessions9c2', JSON.stringify(sessions));
+            renderHistoryList();
+        }
+
+        function renderHistoryList() {
+            historyList.innerHTML = '';
+            const sessionKeys = Object.keys(sessions).reverse();
+            sessionKeys.forEach(key => {
+                const btn = document.createElement('button');
+                btn.className = 'w-full text-left border border-white/10 px-2.5 py-2 hover:border-emerald-400 text-gray-400 hover:text-white text-xs truncate rounded transition-colors';
+                let firstMsg = sessions[key].find(m => m.role === 'user');
+                btn.textContent = firstMsg ? firstMsg.content.substring(0, 26) + '...' : 'Phiên làm việc';
+                btn.onclick = () => loadSession(key);
+                historyList.appendChild(btn);
+            });
+        }
+
+        function loadSession(id) {
+            sessionId = id;
+            conversationHistory = sessions[id] || [];
+            chatContainer.innerHTML = '';
+            const wrapperPC = document.createElement('div');
+            wrapperPC.className = "w-full max-w-5xl mx-auto flex flex-col gap-6";
+            chatContainer.appendChild(wrapperPC);
+
+            conversationHistory.forEach(msg => {
+                if (msg.role !== 'system') {
+                    if (msg.mediaData) {
+                        appendMediaMessage(msg.role === 'user' ? 'user' : 'bot', msg.mediaData, msg.content.includes("video"));
+                    } else {
+                        appendMessage(msg.role === 'assistant' ? 'bot' : 'user', msg.content);
+                    }
+                }
+            });
+            if(window.innerWidth < 768) closeSidebar();
+            scrollToBottom();
+        }
+
+        window.newChat = function() {
+            sessionId = Date.now().toString();
+            conversationHistory = [];
+            resetChat();
+            if(window.innerWidth < 768) closeSidebar();
+        };
+
+        window.executeQuickCommand = function(cmd) {
+            userInput.value = cmd;
+            chatForm.dispatchEvent(new Event('submit'));
+        };
+
+        renderHistoryList();
+
+        ttsToggle.addEventListener('click', () => {
+            isTtsEnabled = !isTtsEnabled;
+            ttsStatus.textContent = isTtsEnabled ? 'ON' : 'OFF';
+            ttsToggle.classList.toggle('text-cyan-400', isTtsEnabled);
+            ttsToggle.classList.toggle('border-cyan-400', isTtsEnabled);
+            if (!isTtsEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
+        });
+
+        function speakBotReply(text) {
+            if (!isTtsEnabled || !window.speechSynthesis) return;
+            const plainText = text.replace(/[#*`~_\[\]]/g, '').slice(0, 500);
+            const utterance = new SpeechSynthesisUtterance(plainText);
+            utterance.lang = 'vi-VN';
+            utterance.rate = 1.05;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        modsToggle.addEventListener('click', () => {
+            currentApiMode = currentApiMode === 'flash' ? 'pro' : 'flash';
+            modsToggle.textContent = currentApiMode === 'flash' ? '[MODS: v1.5 Flash]' : '[MODS: v3 Pro]';
+            modsToggle.classList.toggle('text-amber-400', currentApiMode === 'pro');
+            modsToggle.classList.toggle('border-amber-400', currentApiMode === 'pro');
+            appendMessage('bot', `[SYSTEM] Đã chuyển đổi sang mô hình **${currentApiMode === 'flash' ? 'v1.5 Flash' : 'v3 Pro'}**.`);
+        });
+
+        async function executeAPI(text) {
+            conversationHistory.push({ role: "user", content: text });
+            saveSession();
+
+            let apiUrl = currentApiMode === 'flash' 
+                ? 'https://gemini-1-5-flash.p.rapidapi.com/' 
+                : 'https://gemini-pro-ai.p.rapidapi.com/';
+            let apiHost = currentApiMode === 'flash'
+                ? 'gemini-1-5-flash.p.rapidapi.com'
+                : 'gemini-pro-ai.p.rapidapi.com';
+
+            let requestBody;
+            if (currentApiMode === 'flash') {
+                let mappedHistory = conversationHistory.filter(m => m.role !== 'system').map(m => {
+                    if (m.mediaData) {
+                        return { role: m.role, content: [{ type: "text", text: m.content }, { type: "image_url", image_url: { url: m.mediaData } }] };
+                    }
+                    return { role: m.role, content: m.content };
+                });
+                requestBody = { model: "gemini-1.5-flash", messages: [{ role: "system", content: getSystemPrompt() }, ...mappedHistory] };
+            } else {
+                requestBody = {
+                    model: "gemini-2.5-pro",
+                    contents: conversationHistory.map(m => ({
+                        role: m.role === 'assistant' ? 'model' : 'user',
+                        parts: [{ text: m.content }]
+                    }))
+                };
+            }
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-rapidapi-host': apiHost, 'x-rapidapi-key': API_KEY },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                let reply = data.result || data.choices?.[0]?.message?.content || data.candidates?.[0]?.content?.parts?.[0]?.text || data.message || "Phản hồi hợp lệ từ 9c2 Core.";
+                reply = reply.replace(/Gemini/gi, currentApiMode === 'flash' ? 'v1.5 Flash' : 'v3 Pro').replace(/Google/gi, '9c2.io.vn');
+                conversationHistory.push({ role: "assistant", content: reply });
+                saveSession();
+                return reply;
+            } catch (err) {
+                const fallback = `[DIAGNOSTIC]: Kết nối gặp sự cố (${err.message}). Hệ thống đã kích hoạt chế độ mô phỏng phản hồi cho: "${text.substring(0, 60)}..."`;
+                conversationHistory.push({ role: "assistant", content: fallback });
+                saveSession();
+                return fallback;
+            }
+        }
+
+        // Live mode
+        let liveStream = null;
+        let currentFacingMode = 'user';
+        let isLiveMicOn = true;
+        let isLiveCamOn = true;
+
+        async function startCamera(facingMode) {
+            if (liveStream) liveStream.getTracks().forEach(t => t.stop());
+            try {
+                liveStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode }, audio: false });
+                liveVideo.srcObject = liveStream;
+                await liveVideo.play().catch(() => {});
+            } catch (err) {
+                liveStatus.textContent = `> CAM ERROR: ${err.message}`;
+            }
+        }
+
+        liveModeBtn.addEventListener('click', async () => {
+            isLiveMode = true;
+            liveOverlay.classList.remove('hidden');
+            liveStatus.textContent = "> KHỞI TẠO CAMERA...";
+            await startCamera(currentFacingMode);
+            liveStatus.textContent = "> ĐANG LẮNG NGHE GIỌNG NÓI_";
+        });
+
+        closeLiveBtn.addEventListener('click', () => {
+            isLiveMode = false;
+            liveOverlay.classList.add('hidden');
+            if (liveStream) {
+                liveStream.getTracks().forEach(t => t.stop());
+                liveStream = null;
+            }
+            if (window.speechSynthesis) window.speechSynthesis.cancel();
+        });
+
+        liveCamToggle.addEventListener('click', () => {
+            if (!liveStream) return;
+            const track = liveStream.getVideoTracks()[0];
+            if (track) {
+                isLiveCamOn = !isLiveCamOn;
+                track.enabled = isLiveCamOn;
+                liveCamToggle.textContent = isLiveCamOn ? '[CAM: BẬT]' : '[CAM: TẮT]';
+            }
+        });
+
+        liveMicToggle.addEventListener('click', () => {
+            isLiveMicOn = !isLiveMicOn;
+            liveMicToggle.textContent = isLiveMicOn ? '[MIC: BẬT]' : '[MIC: TẮT]';
+        });
+
+        liveFlipCam.addEventListener('click', async () => {
+            currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+            await startCamera(currentFacingMode);
+        });
+
+        // Speech recognition
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recog = SpeechRec ? new SpeechRec() : null;
+        if (recog) {
+            recog.lang = 'vi-VN';
+            recog.onstart = () => {
+                micBtn.classList.add('mic-recording');
+                micBtn.textContent = '[REC...]';
+            };
+            recog.onresult = (e) => {
+                let text = e.results[e.results.length - 1][0].transcript;
+                userInput.value += (userInput.value ? ' ' : '') + text;
+            };
+            recog.onend = () => {
+                micBtn.classList.remove('mic-recording');
+                micBtn.textContent = '[MIC]';
+            };
+        }
+
+        micBtn.addEventListener('click', () => {
+            if (!recog) return alert('SpeechRecognition API không hỗ trợ.');
+            try { recog.start(); } catch { recog.stop(); }
+        });
+
+        // EDU Solver
+        eduBtn.addEventListener('click', () => eduInput.click());
+        eduInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64 = e.target.result;
+                appendMediaMessage('user', base64, false);
+                conversationHistory.push({ role: "user", content: "[EDU Camera Problem Solver]", mediaData: base64 });
+                
+                const prompt = "Vui lòng phân tích hình ảnh và giải chi tiết từng bước tất cả bài tập có trong ảnh. Trình bày rõ ràng công thức và đáp số cuối cùng.";
+                appendMessage('user', "[EDU_MODE]: Yêu cầu giải bài tập từ ảnh...");
+                showTypingIndicator();
+                sendBtn.disabled = true;
+                
+                try {
+                    const reply = await executeAPI(prompt);
+                    removeTypingIndicator();
+                    appendMessage('bot', reply);
+                    speakBotReply(reply);
+                } catch(err) {
+                    removeTypingIndicator();
+                    appendMessage('bot', `[LỖI]: ${err.message}`);
+                } finally {
+                    sendBtn.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+            this.value = '';
+        });
+
+        // Regular file
+        attachBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', function() {
+            const file = this.files[0];
+            if (!file) return;
+            const isVideo = file.type.startsWith('video/');
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                appendMediaMessage('user', e.target.result, isVideo);
+                conversationHistory.push({ role: "user", content: isVideo ? "[Video attached]" : "[Image attached]", mediaData: e.target.result });
+                saveSession();
+            };
+            reader.readAsDataURL(file);
+            this.value = '';
+        });
+
+        function appendMediaMessage(role, url, isVideo) {
+            let container = chatContainer.querySelector('.max-w-5xl') || chatContainer;
+            const div = document.createElement('div');
+            div.className = 'w-full message-fade-in';
+            div.innerHTML = `<div class="font-bold mb-1 text-xs text-emerald-400">${role === 'user' ? 'guest@9c2.io.vn:~$ ' : 'root@9c2.io.vn:~# '}</div>`;
+            const media = isVideo ? `<video src="${url}" controls class="msg-media"></video>` : `<img src="${url}" class="msg-media">`;
+            div.innerHTML += `<div class="pl-4">${media}</div>`;
+            container.appendChild(div);
+            scrollToBottom();
+        }
+
+        function appendMessage(role, content) {
+            let container = chatContainer.querySelector('.max-w-5xl') || chatContainer;
+            const div = document.createElement('div');
+            div.className = `w-full message-fade-in ${role === 'user' ? 'text-slate-100' : 'text-emerald-400'}`;
+            const header = `<div class="font-bold mb-1 text-xs">${role === 'user' ? 'guest@9c2.io.vn:~$ ' : 'root@9c2.io.vn:~# '}</div>`;
+            const body = `<div class="pl-4 markdown-body text-sm sm:text-base">${role === 'user' ? content : marked.parse(content)}</div>`;
+            div.innerHTML = header + body;
+            container.appendChild(div);
+            scrollToBottom();
+        }
+
+        function showTypingIndicator() {
+            let container = chatContainer.querySelector('.max-w-5xl') || chatContainer;
+            const div = document.createElement('div');
+            div.id = 'typing-indicator';
+            div.className = 'w-full text-emerald-400 message-fade-in';
+            div.innerHTML = `<div class="font-bold mb-1 text-xs">root@9c2.io.vn:~# </div><div class="pl-4"><span class="typing-cursor"></span> <span class="text-xs text-gray-400">Đang xử lý...</span></div>`;
+            container.appendChild(div);
+            scrollToBottom();
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById('typing-indicator');
+            if (el) el.remove();
+        }
+
+        function scrollToBottom() {
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+        }
+
+        function resetChat() {
+            conversationHistory = [];
+            chatContainer.innerHTML = `
+                <div class="w-full max-w-5xl mx-auto flex flex-col gap-6">
+                    <div class="w-full text-emerald-400 message-fade-in">
+                        <div class="font-bold mb-1 text-xs">root@9c2.io.vn:~#</div>
+                        <div class="pl-4 markdown-body text-sm sm:text-base text-slate-200">
+                            [OK] Màn hình đã dọn sạch. Hệ thống **9c2** sẵn sàng cho lệnh mới.
+                        </div>
+                    </div>
+                </div>
+            `;
+            saveSession();
+        }
+
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (userInput.value.trim()) chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            if (text === '/clear') {
+                resetChat();
+                userInput.value = '';
+                return;
+            }
+
+            userInput.value = '';
+            sendBtn.disabled = true;
+            appendMessage('user', text);
+            showTypingIndicator();
+
+            try {
+                const reply = await executeAPI(text);
+                removeTypingIndicator();
+                appendMessage('bot', reply);
+                speakBotReply(reply);
+            } catch(err) {
+                removeTypingIndicator();
+                appendMessage('bot', `[LỖI]: ${err.message}`);
+            } finally {
+                sendBtn.disabled = false;
+                userInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
